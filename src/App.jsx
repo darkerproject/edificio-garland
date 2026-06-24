@@ -17,7 +17,7 @@ const C = {
   red: "#c0392b",
 };
 const FONT = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
-const APP_VERSION = "v2";
+const APP_VERSION = "v3";
 
 /* ------------------------------- utilities -------------------------------- */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -143,13 +143,13 @@ function UpdateCard() {
   if (!show) return null;
   const actualizar = () => { try { window.__updateSW ? window.__updateSW() : location.reload(); } catch { location.reload(); } };
   return (
-    <div className="fixed left-1/2 -translate-x-1/2 z-[60] w-[92%] max-w-sm bottom-20 md:bottom-4">
-      <div className="flex items-center gap-3 rounded-2xl px-4 py-3 shadow-lg" style={{ background: C.ink, color: "#fff" }}>
+    <div className="fixed inset-x-0 md:left-60 z-[60] bottom-20 md:bottom-4 px-4 flex justify-center" style={{ pointerEvents: "none" }}>
+      <div className="w-full max-w-sm flex items-center gap-3 rounded-2xl px-4 py-3 shadow-lg" style={{ background: C.ink, color: "#fff", pointerEvents: "auto" }}>
         <div className="flex-1">
           <div className="font-bold text-sm">Nueva versión disponible</div>
           <div className="text-xs" style={{ color: "#c9d2dc" }}>Actualiza para ver los últimos cambios.</div>
         </div>
-        <button onClick={actualizar} className="rounded-xl px-3.5 py-2 text-sm font-bold" style={{ background: C.primary, color: "#fff" }}>Actualizar</button>
+        <button onClick={actualizar} className="rounded-xl px-3.5 py-2 text-sm font-bold shrink-0" style={{ background: C.primary, color: "#fff" }}>Actualizar</button>
       </div>
     </div>
   );
