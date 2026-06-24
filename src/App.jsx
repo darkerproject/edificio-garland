@@ -17,7 +17,7 @@ const C = {
   red: "#c0392b",
 };
 const FONT = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
-const APP_VERSION = "v3";
+const APP_VERSION = "v4";
 
 /* ------------------------------- utilities -------------------------------- */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -373,7 +373,7 @@ export default function App() {
   );
 
   return (
-    <div style={{ fontFamily: FONT, background: C.bg, color: C.ink, position: "fixed", top: 0, left: 0, right: 0, bottom: 0, overflow: "hidden" }} className="flex flex-col">
+    <div className="app-shell flex flex-col" style={{ fontFamily: FONT, background: C.bg, color: C.ink, overflow: "hidden" }}>
       {/* franja safe-area superior (móvil) */}
       <div className="md:hidden shrink-0" style={{ paddingTop: "env(safe-area-inset-top)", background: C.surface, borderBottom: `1px solid ${C.line}` }} />
       {/* sidebar (desktop) */}
