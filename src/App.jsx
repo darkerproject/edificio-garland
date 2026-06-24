@@ -17,6 +17,7 @@ const C = {
   red: "#c0392b",
 };
 const FONT = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+const APP_VERSION = "v1";
 
 /* ------------------------------- utilities -------------------------------- */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -131,6 +132,29 @@ function SectionTitle({ children, right }) {
   return <div className="flex items-center justify-between mb-2 mt-1"><h2 className="text-sm font-bold uppercase tracking-wide" style={{ color: C.sub, letterSpacing: ".04em" }}>{children}</h2>{right}</div>;
 }
 
+/* ============================== update card ================================ */
+function UpdateCard() {
+  const [show, setShow] = useState(typeof window !== "undefined" && !!window.__needRefresh);
+  useEffect(() => {
+    const h = () => setShow(true);
+    window.addEventListener("pwa:need-refresh", h);
+    return () => window.removeEventListener("pwa:need-refresh", h);
+  }, []);
+  if (!show) return null;
+  const actualizar = () => { try { window.__updateSW ? window.__updateSW() : location.reload(); } catch { location.reload(); } };
+  return (
+    <div className="fixed left-1/2 -translate-x-1/2 z-[60] w-[92%] max-w-sm bottom-20 md:bottom-4">
+      <div className="flex items-center gap-3 rounded-2xl px-4 py-3 shadow-lg" style={{ background: C.ink, color: "#fff" }}>
+        <div className="flex-1">
+          <div className="font-bold text-sm">Nueva versión disponible</div>
+          <div className="text-xs" style={{ color: "#c9d2dc" }}>Actualiza para ver los últimos cambios.</div>
+        </div>
+        <button onClick={actualizar} className="rounded-xl px-3.5 py-2 text-sm font-bold" style={{ background: C.primary, color: "#fff" }}>Actualizar</button>
+      </div>
+    </div>
+  );
+}
+
 /* ================================ login ==================================== */
 function Login({ onLogin }) {
   const [usuario, setUsuario] = useState("");
@@ -190,6 +214,7 @@ function Login({ onLogin }) {
         </div>
         <div className="text-xs text-center mt-4" style={{ color: C.sub }}>Las cuentas las gestiona el administrador.</div>
       </div>
+      <UpdateCard />
     </div>
   );
 }
@@ -348,12 +373,12 @@ export default function App() {
   );
 
   return (
-    <div style={{ fontFamily: FONT, background: C.bg, color: C.ink }} className="min-h-screen">
+    <div style={{ fontFamily: FONT, background: C.bg, color: C.ink, height: "100dvh" }} className="flex flex-col">
       {/* sidebar (desktop) */}
-      <aside className="hidden md:flex flex-col fixed left-0 top-0 bottom-0 w-60 border-r px-3 py-5" style={{ background: C.surface, borderColor: C.line }}>
+      <aside className="hidden md:flex flex-col fixed left-0 top-0 bottom-0 w-60 border-r px-3 py-5 z-30" style={{ background: C.surface, borderColor: C.line }}>
         <div className="flex items-center gap-2 px-2 mb-6">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: C.primary }}><Building2 size={20} color="#fff" /></div>
-          <div><div className="font-bold leading-tight">Edificio</div><div className="text-xs" style={{ color: C.sub }}>Control de alquileres</div></div>
+          <div><div className="font-bold leading-tight">Edificio Garland</div><div className="text-xs" style={{ color: C.sub }}>Control de alquileres</div></div>
         </div>
         {NAV.map((n) => { const A = n.icon; const on = view === n.id; return (
           <button key={n.id} onClick={() => setView(n.id)} className="flex items-center gap-3 px-3 py-2.5 rounded-xl mb-1 text-sm font-semibold transition" style={{ background: on ? C.primarySoft : "transparent", color: on ? C.primaryDk : C.sub }}>
@@ -366,9 +391,9 @@ export default function App() {
         </div>
       </aside>
 
-      {/* main */}
-      <main className="md:ml-60 pb-24 md:pb-10">
-        <div className="max-w-3xl mx-auto px-4 md:px-8 pt-5">
+      {/* main (área scrollable) */}
+      <main className="flex-1 overflow-y-auto md:ml-60" style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}>
+        <div className="max-w-3xl mx-auto px-4 md:px-8 pt-5 pb-8">
           {view === "inicio" && <Inicio />}
           {view === "deptos" && <Deptos />}
           {view === "ingresos" && <Ingresos />}
@@ -377,8 +402,8 @@ export default function App() {
         </div>
       </main>
 
-      {/* bottom nav (mobile) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 flex border-t z-40" style={{ background: C.surface, borderColor: C.line, paddingBottom: "env(safe-area-inset-bottom)" }}>
+      {/* bottom nav (mobile) — estático, fuera del scroll, no se mueve */}
+      <nav className="md:hidden flex border-t shrink-0 z-30" style={{ background: C.surface, borderColor: C.line, paddingBottom: "env(safe-area-inset-bottom)" }}>
         {NAV.map((n) => { const A = n.icon; const on = view === n.id; return (
           <button key={n.id} onClick={() => setView(n.id)} className="flex-1 flex flex-col items-center gap-0.5 py-2.5" style={{ color: on ? C.primary : C.sub }}>
             <A size={21} /><span className="text-[11px] font-semibold">{n.label}</span>
@@ -387,6 +412,7 @@ export default function App() {
       </nav>
 
       {syncing && <div className="fixed z-50 bottom-20 md:bottom-4 right-4 rounded-full px-3 py-1.5 text-xs font-semibold shadow" style={{ background: C.surface, border: `1px solid ${C.line}`, color: C.sub }}>Guardando…</div>}
+      <UpdateCard />
       {modal && renderModal()}
     </div>
   );
@@ -616,6 +642,7 @@ export default function App() {
           <LogOut size={18} /> Cerrar sesión
         </button>
         <div className="text-xs text-center mt-3" style={{ color: C.sub }}>Mientras no cierres sesión, seguirás dentro aunque cierres o recargues la ventana.</div>
+        <div className="text-xs text-center mt-4" style={{ color: C.sub }}>Edificio Garland · {APP_VERSION}</div>
       </>
     );
   }

@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.3" y2="1">
+      <stop offset="0" stop-color="#16958a"/>
+      <stop offset="1" stop-color="#0a4f47"/>
+    </linearGradient>
+    <linearGradient id="face" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e6f3ef"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" fill="url(#bg)"/>
+
+  <!-- ground shadow -->
+  <ellipse cx="256" cy="410" rx="156" ry="20" fill="#000000" opacity="0.13"/>
+
+  <!-- left tower (behind) -->
+  <rect x="128" y="236" width="76" height="160" fill="#d4ece6"/>
+  <rect x="128" y="236" width="76" height="10" fill="#eaf6f2"/>
+  <g fill="#0f6e63">
+    <rect x="140" y="256" width="22" height="22" rx="4"/>
+    <rect x="172" y="256" width="22" height="22" rx="4"/>
+    <rect x="140" y="290" width="22" height="22" rx="4"/>
+    <rect x="172" y="290" width="22" height="22" rx="4" fill="#f4b740"/>
+    <rect x="140" y="324" width="22" height="22" rx="4"/>
+    <rect x="172" y="324" width="22" height="22" rx="4"/>
+    <rect x="140" y="358" width="22" height="22" rx="4"/>
+    <rect x="172" y="358" width="22" height="22" rx="4"/>
+  </g>
+
+  <!-- main tower: iso roof + right side + front -->
+  <polygon points="176,168 320,168 356,140 212,140" fill="#eef7f4"/>
+  <polygon points="320,168 356,140 356,360 320,396" fill="#a6d6cc"/>
+  <rect x="176" y="168" width="144" height="228" fill="url(#face)"/>
+
+  <!-- rooftop mast -->
+  <rect x="262" y="120" width="6" height="22" rx="3" fill="#0a4f47"/>
+  <circle cx="265" cy="118" r="6" fill="#f4b740"/>
+
+  <!-- main windows -->
+  <g fill="#0f6e63">
+    <rect x="196" y="188" width="26" height="26" rx="5"/>
+    <rect x="240" y="188" width="26" height="26" rx="5" fill="#f4b740"/>
+    <rect x="284" y="188" width="26" height="26" rx="5"/>
+    <rect x="196" y="230" width="26" height="26" rx="5"/>
+    <rect x="240" y="230" width="26" height="26" rx="5"/>
+    <rect x="284" y="230" width="26" height="26" rx="5"/>
+    <rect x="196" y="272" width="26" height="26" rx="5" fill="#f4b740"/>
+    <rect x="240" y="272" width="26" height="26" rx="5"/>
+    <rect x="284" y="272" width="26" height="26" rx="5"/>
+    <rect x="196" y="314" width="26" height="26" rx="5"/>
+    <rect x="284" y="314" width="26" height="26" rx="5"/>
+  </g>
+
+  <!-- door -->
+  <path d="M232 396 v-34 a24 24 0 0 1 48 0 v34 z" fill="#0f6e63"/>
+  <circle cx="271" cy="378" r="3" fill="#f4b740"/>
+</svg>
