@@ -17,7 +17,7 @@ const C = {
   red: "#c0392b",
 };
 const FONT = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
-const APP_VERSION = "v5";
+const APP_VERSION = "v6";
 
 /* ------------------------------- utilities -------------------------------- */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -114,8 +114,8 @@ function Modal({ title, onClose, children, footer }) {
           <h3 className="font-bold text-lg" style={{ color: C.ink }}>{title}</h3>
           <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-100"><X size={20} color={C.sub} /></button>
         </div>
-        <div className="px-5 py-4 overflow-y-auto">{children}</div>
-        {footer && <div className="px-5 py-3 border-t flex gap-2" style={{ borderColor: C.line }}>{footer}</div>}
+        <div className="px-5 py-4 overflow-y-auto" style={{ overflowX: "hidden", paddingBottom: footer ? undefined : "calc(env(safe-area-inset-bottom) + 16px)" }}>{children}</div>
+        {footer && <div className="px-5 py-3 border-t flex gap-2" style={{ borderColor: C.line, paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)" }}>{footer}</div>}
       </div>
     </div>
   );
