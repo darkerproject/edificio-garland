@@ -17,7 +17,7 @@ const C = {
   red: "#c0392b",
 };
 const FONT = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
-const APP_VERSION = "v7";
+const APP_VERSION = "v8";
 
 /* ------------------------------- utilities -------------------------------- */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -266,6 +266,24 @@ export default function App() {
       setSyncing(false);
     }, 800);
   }, [data, loaded, loadError]);
+  /* keep app height synced to the visible viewport (fixes keyboard leaving a gap) */
+  useEffect(() => {
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    const setH = () => {
+      const h = vv ? vv.height : window.innerHeight;
+      document.documentElement.style.setProperty("--app-height", h + "px");
+    };
+    setH();
+    if (vv) { vv.addEventListener("resize", setH); vv.addEventListener("scroll", setH); }
+    window.addEventListener("resize", setH);
+    window.addEventListener("orientationchange", setH);
+    return () => {
+      if (vv) { vv.removeEventListener("resize", setH); vv.removeEventListener("scroll", setH); }
+      window.removeEventListener("resize", setH);
+      window.removeEventListener("orientationchange", setH);
+    };
+  }, []);
+
   /* auto-create current month charges for occupied units */
   useEffect(() => {
     if (!loaded) return;
