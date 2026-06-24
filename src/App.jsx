@@ -17,7 +17,7 @@ const C = {
   red: "#c0392b",
 };
 const FONT = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
-const APP_VERSION = "v1";
+const APP_VERSION = "v2";
 
 /* ------------------------------- utilities -------------------------------- */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -350,7 +350,7 @@ export default function App() {
   /* ------------------------------- nav ------------------------------------ */
   const NAV = [
     { id: "inicio", label: "Inicio", icon: Home },
-    { id: "deptos", label: "Deptos", icon: Building2 },
+    { id: "deptos", label: "Dptos", icon: Building2 },
     { id: "ingresos", label: "Ingresos", icon: ArrowUpCircle },
     { id: "gastos", label: "Gastos", icon: ArrowDownCircle },
     { id: "ajustes", label: "Ajustes", icon: Settings },
@@ -373,7 +373,9 @@ export default function App() {
   );
 
   return (
-    <div style={{ fontFamily: FONT, background: C.bg, color: C.ink, height: "100dvh" }} className="flex flex-col">
+    <div style={{ fontFamily: FONT, background: C.bg, color: C.ink, position: "fixed", top: 0, left: 0, right: 0, bottom: 0, overflow: "hidden" }} className="flex flex-col">
+      {/* franja safe-area superior (móvil) */}
+      <div className="md:hidden shrink-0" style={{ paddingTop: "env(safe-area-inset-top)", background: C.surface, borderBottom: `1px solid ${C.line}` }} />
       {/* sidebar (desktop) */}
       <aside className="hidden md:flex flex-col fixed left-0 top-0 bottom-0 w-60 border-r px-3 py-5 z-30" style={{ background: C.surface, borderColor: C.line }}>
         <div className="flex items-center gap-2 px-2 mb-6">
