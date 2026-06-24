@@ -3,6 +3,7 @@ import {
   Home, Building2, ArrowDownCircle, ArrowUpCircle, Plus, X, Pencil,
   Trash2, CalendarClock, TrendingUp, TrendingDown, Check, Users,
   AlertCircle, Wallet, Tag, ChevronRight, ChevronLeft, BellRing,
+  Settings, LogOut, Lock, User,
 } from "lucide-react";
 
 /* ----------------------------- design tokens ----------------------------- */
@@ -53,15 +54,26 @@ const nextDue = (dia) => {
 
 /* ------------------------------- storage ---------------------------------- */
 const API = "/api/data";
+const SES_KEY = "sesion";
+function getSesion() { try { return JSON.parse(localStorage.getItem(SES_KEY) || "null"); } catch { return null; } }
+function setSesion(s) { try { localStorage.setItem(SES_KEY, JSON.stringify(s)); } catch {} }
+function clearSesion() { try { localStorage.removeItem(SES_KEY); } catch {} }
+function getToken() { const s = getSesion(); return s && s.token ? s.token : ""; }
+
+async function login(usuario, password) {
+  const r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ usuario, password }) });
+  const d = await r.json();
+  return d;
+}
 async function cargarDatos() {
-  const r = await fetch(API);
+  const r = await fetch(API, { headers: { "x-sesion": getToken() } });
   if (!r.ok) throw new Error("HTTP " + r.status);
   const d = await r.json();
   if (!d || !d.ok) throw new Error(d && d.error ? d.error : "Respuesta inválida del servidor");
   return d.state;
 }
 async function guardarDatos(state) {
-  const r = await fetch(API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ state }) });
+  const r = await fetch(API, { method: "POST", headers: { "Content-Type": "application/json", "x-sesion": getToken() }, body: JSON.stringify({ state }) });
   const d = await r.json();
   if (!d || !d.ok) throw new Error(d && d.error ? d.error : "Error al guardar");
 }
@@ -119,8 +131,72 @@ function SectionTitle({ children, right }) {
   return <div className="flex items-center justify-between mb-2 mt-1"><h2 className="text-sm font-bold uppercase tracking-wide" style={{ color: C.sub, letterSpacing: ".04em" }}>{children}</h2>{right}</div>;
 }
 
+/* ================================ login ==================================== */
+function Login({ onLogin }) {
+  const [usuario, setUsuario] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [cargando, setCargando] = useState(false);
+
+  const entrar = async () => {
+    if (!usuario.trim() || !password) return;
+    setCargando(true); setError("");
+    try {
+      const d = await login(usuario.trim(), password);
+      if (d && d.ok && d.token) {
+        const s = { token: d.token, nombre: d.nombre || usuario.trim(), usuario: usuario.trim() };
+        setSesion(s); onLogin(s);
+      } else {
+        setError(d && d.error ? d.error : "No se pudo iniciar sesión");
+      }
+    } catch (e) {
+      setError("Error de conexión. Intenta de nuevo.");
+    }
+    setCargando(false);
+  };
+
+  return (
+    <div style={{ fontFamily: FONT, background: C.bg, color: C.ink }} className="min-h-screen flex items-center justify-center p-5">
+      <div className="w-full max-w-sm">
+        <div className="flex flex-col items-center mb-6">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-3" style={{ background: C.primary }}><Building2 size={28} color="#fff" /></div>
+          <div className="font-extrabold text-2xl tracking-tight">Edificio Garland</div>
+          <div className="text-sm" style={{ color: C.sub }}>Control de alquileres y gastos</div>
+        </div>
+        <div className="rounded-2xl p-5" style={{ background: C.surface, border: `1px solid ${C.line}` }}>
+          <label className="block mb-3">
+            <span className="block text-xs font-semibold mb-1.5" style={{ color: C.sub }}>Usuario</span>
+            <div className="flex items-center gap-2 rounded-xl px-3" style={{ border: `1px solid ${C.line}` }}>
+              <User size={17} color={C.sub} />
+              <input value={usuario} onChange={(e) => setUsuario(e.target.value)} autoCapitalize="none" autoCorrect="off"
+                onKeyDown={(e) => e.key === "Enter" && entrar()}
+                style={{ flex: 1, border: "none", outline: "none", padding: "10px 0", fontSize: 15, color: C.ink, background: "transparent", fontFamily: FONT }} />
+            </div>
+          </label>
+          <label className="block mb-4">
+            <span className="block text-xs font-semibold mb-1.5" style={{ color: C.sub }}>Contraseña</span>
+            <div className="flex items-center gap-2 rounded-xl px-3" style={{ border: `1px solid ${C.line}` }}>
+              <Lock size={17} color={C.sub} />
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && entrar()}
+                style={{ flex: 1, border: "none", outline: "none", padding: "10px 0", fontSize: 15, color: C.ink, background: "transparent", fontFamily: FONT }} />
+            </div>
+          </label>
+          {error && <div className="text-sm mb-3 px-1" style={{ color: C.expense }}>{error}</div>}
+          <button onClick={entrar} disabled={cargando || !usuario.trim() || !password}
+            className="w-full rounded-xl py-3 font-semibold text-white transition active:scale-[.99] disabled:opacity-50" style={{ background: C.primary }}>
+            {cargando ? "Entrando…" : "Entrar"}
+          </button>
+        </div>
+        <div className="text-xs text-center mt-4" style={{ color: C.sub }}>Las cuentas las gestiona el administrador.</div>
+      </div>
+    </div>
+  );
+}
+
 /* ================================== app ==================================== */
 export default function App() {
+  const [sesion, setSes] = useState(getSesion());
   const [view, setView] = useState("inicio");
   const [data, setData] = useState(DEFAULT);
   const [loaded, setLoaded] = useState(false);
@@ -135,15 +211,27 @@ export default function App() {
   const shiftMonth = (delta) => { const [y, m] = selMonth.split("-").map(Number); const d = new Date(y, m - 1 + delta, 1); setSelMonth(`${d.getFullYear()}-${pad(d.getMonth() + 1)}`); };
   const matchPeriod = (fechaStr) => { const f = parse(fechaStr); if (period === "año") return f.getFullYear() === selYear; const [y, m] = selMonth.split("-").map(Number); return f.getFullYear() === y && f.getMonth() === m - 1; };
 
-  /* load from API */
-  useEffect(() => { (async () => {
-    try { const s = await cargarDatos(); if (s) setData({ ...DEFAULT, ...s }); }
-    catch (e) { setLoadError(String(e.message || e)); }
-    setLoaded(true);
-  })(); }, []);
+  const onLogin = (s) => { setSesion(s); setSes(s); };
+  const logout = () => { clearSesion(); setSes(null); setData(DEFAULT); setLoaded(false); setLoadError(null); setView("inicio"); firstSave.current = true; };
+
+  /* load from API (only when logged in) */
+  useEffect(() => {
+    if (!sesion) return;
+    firstSave.current = true;
+    setLoaded(false); setLoadError(null);
+    (async () => {
+      try { const s = await cargarDatos(); if (s) setData({ ...DEFAULT, ...s }); }
+      catch (e) {
+        const msg = String(e.message || e);
+        if (/inv[áa]lida|autoriz|sesi[óo]n/i.test(msg)) { logout(); return; }
+        setLoadError(msg);
+      }
+      setLoaded(true);
+    })();
+  }, [sesion]);
   /* save to API (debounced) */
   useEffect(() => {
-    if (!loaded || loadError) return;
+    if (!sesion || !loaded || loadError) return;
     if (firstSave.current) { firstSave.current = false; return; }
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
@@ -237,11 +325,13 @@ export default function App() {
   /* ------------------------------- nav ------------------------------------ */
   const NAV = [
     { id: "inicio", label: "Inicio", icon: Home },
-    { id: "deptos", label: "Departamentos", icon: Building2 },
+    { id: "deptos", label: "Deptos", icon: Building2 },
     { id: "ingresos", label: "Ingresos", icon: ArrowUpCircle },
     { id: "gastos", label: "Gastos", icon: ArrowDownCircle },
+    { id: "ajustes", label: "Ajustes", icon: Settings },
   ];
 
+  if (!sesion) return <Login onLogin={onLogin} />;
   if (!loaded) return <div style={{ fontFamily: FONT, background: C.bg }} className="min-h-screen flex items-center justify-center"><span style={{ color: C.sub }}>Cargando…</span></div>;
   if (loadError) return (
     <div style={{ fontFamily: FONT, background: C.bg, color: C.ink }} className="min-h-screen flex items-center justify-center p-6">
@@ -249,7 +339,10 @@ export default function App() {
         <div className="font-bold text-lg mb-2">No se pudo conectar con la base de datos</div>
         <div className="text-sm mb-4" style={{ color: C.sub }}>{loadError}</div>
         <div className="text-xs mb-4" style={{ color: C.sub }}>Revisa que en Vercel estén configuradas las variables APPSCRIPT_URL y APP_SECRET, y que la Web App de Apps Script esté publicada con acceso «Cualquier usuario».</div>
-        <button onClick={() => location.reload()} className="rounded-xl px-4 py-2 text-sm font-semibold text-white" style={{ background: C.primary }}>Reintentar</button>
+        <div className="flex gap-2 justify-center">
+          <button onClick={() => location.reload()} className="rounded-xl px-4 py-2 text-sm font-semibold text-white" style={{ background: C.primary }}>Reintentar</button>
+          <button onClick={logout} className="rounded-xl px-4 py-2 text-sm font-semibold" style={{ background: C.soft, color: C.sub }}>Cerrar sesión</button>
+        </div>
       </div>
     </div>
   );
@@ -267,6 +360,10 @@ export default function App() {
             <A size={19} />{n.label}
           </button>
         ); })}
+        <div className="mt-auto px-3 pt-3 border-t" style={{ borderColor: C.line }}>
+          <div className="text-xs" style={{ color: C.sub }}>Sesión</div>
+          <div className="text-sm font-semibold truncate">{sesion.nombre || sesion.usuario}</div>
+        </div>
       </aside>
 
       {/* main */}
@@ -276,6 +373,7 @@ export default function App() {
           {view === "deptos" && <Deptos />}
           {view === "ingresos" && <Ingresos />}
           {view === "gastos" && <Gastos />}
+          {view === "ajustes" && <Configuracion />}
         </div>
       </main>
 
@@ -505,6 +603,23 @@ export default function App() {
   }
 
   /* =============================== modals ================================= */
+  function Configuracion() {
+    return (
+      <>
+        <h1 className="text-2xl font-extrabold tracking-tight mb-4">Ajustes</h1>
+        <Card className="p-4 mb-3">
+          <div className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.sub }}>Sesión iniciada</div>
+          <div className="font-bold text-lg">{sesion.nombre || sesion.usuario}</div>
+          {sesion.usuario && <div className="text-sm" style={{ color: C.sub }}>Usuario: {sesion.usuario}</div>}
+        </Card>
+        <button onClick={logout} className="w-full flex items-center justify-center gap-2 rounded-xl py-3 font-semibold text-white" style={{ background: C.expense }}>
+          <LogOut size={18} /> Cerrar sesión
+        </button>
+        <div className="text-xs text-center mt-3" style={{ color: C.sub }}>Mientras no cierres sesión, seguirás dentro aunque cierres o recargues la ventana.</div>
+      </>
+    );
+  }
+
   function renderModal() {
     if (modal.type === "deptoForm") return <DeptoForm dept={modal.dept} />;
     if (modal.type === "deptoDetail") return <DeptoDetail id={modal.id} />;
