@@ -4,4 +4,4 @@ body{overflow:hidden;overscroll-behavior:none;}
 #root{height:100%;}
 .app-shell{height:100vh;height:100dvh;}
 input,select,textarea{box-sizing:border-box;max-width:100%;}
-input[type="date"],input[type="month"]{-webkit-appearance:none;appearance:none;min-width:0;width:100%;}
+input[type="date"],input[type="month"]{-webkit-appearance:none;appearance:none;min-width:0;width:100%;min-height:42px;line-height:1.25;}
