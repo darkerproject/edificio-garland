@@ -17,7 +17,7 @@ const C = {
   red: "#c0392b",
 };
 const FONT = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
-const APP_VERSION = "v8";
+const APP_VERSION = "v9";
 
 /* ------------------------------- utilities -------------------------------- */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -82,6 +82,8 @@ async function guardarDatos(state) {
 const DEFAULT = {
   departamentos: [],
   inquilinos: [],
+  depositos: [],
+  asignaciones: [],
   cobros: [],
   gastos: [],
   otrosIngresos: [],
@@ -234,6 +236,7 @@ export default function App() {
   const [period, setPeriod] = useState("mes");
   const [selMonth, setSelMonth] = useState(currentPeriodo());
   const [selYear, setSelYear] = useState(new Date().getFullYear());
+  const [deptoTab, setDeptoTab] = useState("deptos");
   const shiftMonth = (delta) => { const [y, m] = selMonth.split("-").map(Number); const d = new Date(y, m - 1 + delta, 1); setSelMonth(`${d.getFullYear()}-${pad(d.getMonth() + 1)}`); };
   const matchPeriod = (fechaStr) => { const f = parse(fechaStr); if (period === "año") return f.getFullYear() === selYear; const [y, m] = selMonth.split("-").map(Number); return f.getFullYear() === y && f.getMonth() === m - 1; };
 
@@ -284,20 +287,27 @@ export default function App() {
     };
   }, []);
 
-  /* auto-create current month charges for occupied units */
+  /* auto-create current month charges for occupied units and active deposits */
   useEffect(() => {
     if (!loaded) return;
     setData((prev) => {
       const per = currentPeriodo(); let changed = false; const cobros = [...prev.cobros];
       prev.inquilinos.filter((i) => !i.fechaRetiro).forEach((inq) => {
-        if (!cobros.some((c) => c.departamentoId === inq.departamentoId && c.periodo === per)) {
-          cobros.push({ id: uid(), departamentoId: inq.departamentoId, inquilinoId: inq.id, periodo: per, monto: inq.monto, vencimiento: vencimientoFor(per, inq.diaPago), inquilinoNombre: inq.nombre, pagos: [] });
+        if (!cobros.some((c) => c.tipo !== "deposito" && c.departamentoId === inq.departamentoId && c.periodo === per)) {
+          cobros.push({ id: uid(), tipo: "alquiler", departamentoId: inq.departamentoId, inquilinoId: inq.id, depositoId: "", asignacionId: "", periodo: per, monto: inq.monto, vencimiento: vencimientoFor(per, inq.diaPago), inquilinoNombre: inq.nombre, pagos: [] });
+          changed = true;
+        }
+      });
+      prev.asignaciones.filter((a) => !a.fechaRetiro).forEach((a) => {
+        if (!cobros.some((c) => c.tipo === "deposito" && c.asignacionId === a.id && c.periodo === per)) {
+          const nom = prev.inquilinos.find((i) => i.departamentoId === a.departamentoId && !i.fechaRetiro)?.nombre || "";
+          cobros.push({ id: uid(), tipo: "deposito", departamentoId: a.departamentoId, inquilinoId: "", depositoId: a.depositoId, asignacionId: a.id, periodo: per, monto: a.monto, vencimiento: vencimientoFor(per, a.diaPago), inquilinoNombre: nom, pagos: [] });
           changed = true;
         }
       });
       return changed ? { ...prev, cobros } : prev;
     });
-  }, [loaded, data.inquilinos]);
+  }, [loaded, data.inquilinos, data.asignaciones]);
 
   /* ----------------------------- mutations -------------------------------- */
   const upd = (fn) => setData((p) => fn({ ...p }));
@@ -322,11 +332,44 @@ export default function App() {
   });
   const retirarInquilino = (inqId, fecha) => upd((p) => { p.inquilinos = p.inquilinos.map((i) => i.id === inqId ? { ...i, fechaRetiro: fecha } : i); return p; });
   const generarCobro = (deptId, periodo) => {
-    const exist = data.cobros.find((c) => c.departamentoId === deptId && c.periodo === periodo);
+    const exist = data.cobros.find((c) => c.tipo !== "deposito" && c.departamentoId === deptId && c.periodo === periodo);
     if (exist) return exist.id;
     const inq = data.inquilinos.find((i) => i.departamentoId === deptId && !i.fechaRetiro);
     if (!inq) return null;
-    const c = { id: uid(), departamentoId: deptId, inquilinoId: inq.id, periodo, monto: inq.monto, vencimiento: vencimientoFor(periodo, inq.diaPago), inquilinoNombre: inq.nombre, pagos: [] };
+    const c = { id: uid(), tipo: "alquiler", departamentoId: deptId, inquilinoId: inq.id, depositoId: "", asignacionId: "", periodo, monto: inq.monto, vencimiento: vencimientoFor(periodo, inq.diaPago), inquilinoNombre: inq.nombre, pagos: [] };
+    setData((p) => ({ ...p, cobros: [...p.cobros, c] }));
+    return c.id;
+  };
+  /* ---- depósitos ---- */
+  const asignacionActual = (depositoId) => data.asignaciones.find((a) => a.depositoId === depositoId && !a.fechaRetiro);
+  const saveDeposito = (d) => upd((p) => {
+    const ex = p.depositos.find((x) => x.id === d.id);
+    if (ex) p.depositos = p.depositos.map((x) => x.id === d.id ? { ...x, nombre: d.nombre } : x);
+    else p.depositos = [...p.depositos, { id: d.id, nombre: d.nombre }];
+    return p;
+  });
+  const delDeposito = (id) => upd((p) => {
+    p.depositos = p.depositos.filter((x) => x.id !== id);
+    p.asignaciones = p.asignaciones.filter((a) => a.depositoId !== id);
+    p.cobros = p.cobros.filter((c) => c.depositoId !== id);
+    return p;
+  });
+  const asignarDeposito = (depositoId, campos) => upd((p) => {
+    p.asignaciones = [...p.asignaciones, { id: uid(), depositoId, departamentoId: campos.departamentoId, monto: Number(campos.monto), diaPago: Number(campos.diaPago), fechaInicio: campos.fechaInicio || "", fechaRetiro: "" }];
+    return p;
+  });
+  const editarAsignacion = (asigId, campos) => upd((p) => {
+    p.asignaciones = p.asignaciones.map((a) => a.id === asigId ? { ...a, monto: Number(campos.monto), diaPago: Number(campos.diaPago), fechaInicio: campos.fechaInicio || "" } : a);
+    return p;
+  });
+  const retirarAsignacion = (asigId, fecha) => upd((p) => { p.asignaciones = p.asignaciones.map((a) => a.id === asigId ? { ...a, fechaRetiro: fecha } : a); return p; });
+  const generarCobroDeposito = (depositoId, periodo) => {
+    const a = data.asignaciones.find((x) => x.depositoId === depositoId && !x.fechaRetiro);
+    if (!a) return null;
+    const exist = data.cobros.find((c) => c.tipo === "deposito" && c.asignacionId === a.id && c.periodo === periodo);
+    if (exist) return exist.id;
+    const nom = data.inquilinos.find((i) => i.departamentoId === a.departamentoId && !i.fechaRetiro)?.nombre || "";
+    const c = { id: uid(), tipo: "deposito", departamentoId: a.departamentoId, inquilinoId: "", depositoId, asignacionId: a.id, periodo, monto: a.monto, vencimiento: vencimientoFor(periodo, a.diaPago), inquilinoNombre: nom, pagos: [] };
     setData((p) => ({ ...p, cobros: [...p.cobros, c] }));
     return c.id;
   };
@@ -362,17 +405,30 @@ export default function App() {
 
   const puntualidad = useMemo(() => {
     const m = {};
-    data.cobros.forEach((c) => { if (cobroEstado(c) === "pagado") { const k = c.inquilinoNombre || "—"; const a = cobroAtraso(c); if (!m[k]) m[k] = { nombre: k, total: 0, n: 0 }; m[k].total += a; m[k].n++; } });
+    data.cobros.forEach((c) => { if (c.tipo !== "deposito" && cobroEstado(c) === "pagado") { const k = c.inquilinoNombre || "—"; const a = cobroAtraso(c); if (!m[k]) m[k] = { nombre: k, total: 0, n: 0 }; m[k].total += a; m[k].n++; } });
     return Object.values(m).map((x) => ({ ...x, avg: x.total / x.n })).sort((a, b) => a.avg - b.avg);
   }, [data]);
 
   const alertas = useMemo(() => {
-    return ocupados.map((d) => {
+    const items = [];
+    ocupados.forEach((d) => {
       const inq = inquilinoActual(d.id);
-      const unpaid = data.cobros.filter((c) => c.departamentoId === d.id && cobroEstado(c) !== "pagado").sort((a, b) => a.vencimiento < b.vencimiento ? -1 : 1);
-      if (unpaid.length) { const c = unpaid[0]; return { dept: d, inq, dias: daysBetween(todayStr(), c.vencimiento), venc: c.vencimiento, saldo: cobroSaldo(c), estado: cobroEstado(c) }; }
-      const nd = nextDue(inq.diaPago); return { dept: d, inq, dias: daysBetween(todayStr(), nd), venc: nd, saldo: inq.monto, estado: "al_dia" };
-    }).filter((a) => a.dias <= 7).sort((a, b) => a.dias - b.dias);
+      const unpaid = data.cobros.filter((c) => c.tipo !== "deposito" && c.departamentoId === d.id && c.inquilinoId === inq.id && cobroEstado(c) !== "pagado").sort((a, b) => a.vencimiento < b.vencimiento ? -1 : 1);
+      const base = { key: "d" + d.id, label: `${d.nombre} · ${inq.nombre}`, target: { type: "deptoDetail", id: d.id } };
+      if (unpaid.length) { const c = unpaid[0]; items.push({ ...base, dias: daysBetween(todayStr(), c.vencimiento), venc: c.vencimiento, saldo: cobroSaldo(c), estado: cobroEstado(c) }); }
+      else { const nd = nextDue(inq.diaPago); items.push({ ...base, dias: daysBetween(todayStr(), nd), venc: nd, saldo: inq.monto, estado: "al_dia" }); }
+    });
+    data.asignaciones.filter((a) => !a.fechaRetiro).forEach((a) => {
+      const dep = data.depositos.find((x) => x.id === a.depositoId); if (!dep) return;
+      const deptName = data.departamentos.find((x) => x.id === a.departamentoId)?.nombre || "";
+      const inqName = inquilinoActual(a.departamentoId)?.nombre || "";
+      const label = `${dep.nombre} · ${inqName}${deptName ? ` (${deptName})` : ""}`;
+      const unpaid = data.cobros.filter((c) => c.tipo === "deposito" && c.asignacionId === a.id && cobroEstado(c) !== "pagado").sort((x, y) => x.vencimiento < y.vencimiento ? -1 : 1);
+      const base = { key: "dep" + a.id, label, target: { type: "depositoDetail", id: a.depositoId } };
+      if (unpaid.length) { const c = unpaid[0]; items.push({ ...base, dias: daysBetween(todayStr(), c.vencimiento), venc: c.vencimiento, saldo: cobroSaldo(c), estado: cobroEstado(c) }); }
+      else { const nd = nextDue(a.diaPago); items.push({ ...base, dias: daysBetween(todayStr(), nd), venc: nd, saldo: a.monto, estado: "al_dia" }); }
+    });
+    return items.filter((a) => a.dias <= 7).sort((a, b) => a.dias - b.dias);
   }, [data]);
 
   const puntLabel = (avg) => {
@@ -515,10 +571,10 @@ export default function App() {
                 const overdue = a.dias < 0;
                 const col = a.estado === "al_dia" && !overdue ? C.primary : overdue ? C.expense : C.amber;
                 return (
-                  <button key={a.dept.id} onClick={() => setModal({ type: "deptoDetail", id: a.dept.id })} className="w-full flex items-center gap-3 px-4 py-3 text-left" style={{ borderTop: i ? `1px solid ${C.line}` : "none" }}>
+                  <button key={a.key} onClick={() => setModal(a.target)} className="w-full flex items-center gap-3 px-4 py-3 text-left" style={{ borderTop: i ? `1px solid ${C.line}` : "none" }}>
                     <CalendarClock size={20} color={col} />
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold truncate">{a.dept.nombre} · {a.inq.nombre}</div>
+                      <div className="font-semibold truncate">{a.label}</div>
                       <div className="text-xs" style={{ color: C.sub }}>
                         {overdue ? `Vencido hace ${Math.abs(a.dias)} d` : a.dias === 0 ? "Vence hoy" : `Vence en ${a.dias} d`} · {fmtDate(a.venc)}
                         {a.estado !== "al_dia" && ` · saldo ${money(a.saldo)}`}
@@ -579,33 +635,70 @@ export default function App() {
   }
 
   function Deptos() {
+    const esDep = deptoTab === "depositos";
     return (
       <>
-        <Header title="Departamentos" onAdd={() => setModal({ type: "deptoForm" })} addLabel="Nuevo" />
-        {data.departamentos.length === 0 ? (
-          <Empty icon={Building2} title="Crea tu primer departamento" sub="Solo registra el nombre. El inquilino se agrega después con el botón Ingreso." />
+        <Header title={esDep ? "Depósitos" : "Departamentos"} onAdd={() => setModal({ type: esDep ? "depositoForm" : "deptoForm" })} addLabel="Nuevo" />
+        <div className="flex gap-1 p-1 rounded-xl mb-4 w-full md:w-auto md:inline-flex" style={{ background: C.soft, border: `1px solid ${C.line}` }}>
+          {[["deptos", "Departamentos"], ["depositos", "Depósitos"]].map(([k, l]) => (
+            <button key={k} onClick={() => setDeptoTab(k)} className="flex-1 md:flex-none rounded-lg px-4 py-1.5 text-sm font-semibold transition" style={{ background: deptoTab === k ? C.surface : "transparent", color: deptoTab === k ? C.ink : C.sub, boxShadow: deptoTab === k ? "0 1px 2px rgba(0,0,0,.06)" : "none" }}>{l}</button>
+          ))}
+        </div>
+
+        {!esDep ? (
+          data.departamentos.length === 0 ? (
+            <Empty icon={Building2} title="Crea tu primer departamento" sub="Solo registra el nombre. El inquilino se agrega después con el botón Ingreso." />
+          ) : (
+            <div className="grid md:grid-cols-2 gap-3">
+              {data.departamentos.map((d) => {
+                const inq = inquilinoActual(d.id);
+                const cur = data.cobros.find((c) => c.tipo !== "deposito" && c.departamentoId === d.id && c.periodo === currentPeriodo());
+                const est = cur ? cobroEstado(cur) : "pendiente";
+                return (
+                  <button key={d.id} onClick={() => setModal({ type: "deptoDetail", id: d.id })} className="text-left">
+                    <Card className="p-4 h-full">
+                      <div className="flex items-start justify-between mb-2">
+                        <div><div className="font-bold text-lg">{d.nombre}</div><div className="text-sm" style={{ color: C.sub }}>{inq ? inq.nombre : "Desalojado"}</div></div>
+                        {inq ? estadoPill(est) : <Pill color={C.sub} bg={C.soft}>Desalojado</Pill>}
+                      </div>
+                      <div className="flex justify-between text-sm pt-2 border-t" style={{ borderColor: C.line }}>
+                        <span style={{ color: C.sub }}>{inq ? "Alquiler" : "Sin inquilino"}</span>
+                        <span className="font-semibold" style={{ fontVariantNumeric: "tabular-nums" }}>{inq ? `${money(inq.monto)} · día ${inq.diaPago}` : "—"}</span>
+                      </div>
+                    </Card>
+                  </button>
+                );
+              })}
+            </div>
+          )
         ) : (
-          <div className="grid md:grid-cols-2 gap-3">
-            {data.departamentos.map((d) => {
-              const inq = inquilinoActual(d.id);
-              const cur = data.cobros.find((c) => c.departamentoId === d.id && c.periodo === currentPeriodo());
-              const est = cur ? cobroEstado(cur) : "pendiente";
-              return (
-                <button key={d.id} onClick={() => setModal({ type: "deptoDetail", id: d.id })} className="text-left">
-                  <Card className="p-4 h-full">
-                    <div className="flex items-start justify-between mb-2">
-                      <div><div className="font-bold text-lg">{d.nombre}</div><div className="text-sm" style={{ color: C.sub }}>{inq ? inq.nombre : "Desalojado"}</div></div>
-                      {inq ? estadoPill(est) : <Pill color={C.sub} bg={C.soft}>Desalojado</Pill>}
-                    </div>
-                    <div className="flex justify-between text-sm pt-2 border-t" style={{ borderColor: C.line }}>
-                      <span style={{ color: C.sub }}>{inq ? "Alquiler" : "Sin inquilino"}</span>
-                      <span className="font-semibold" style={{ fontVariantNumeric: "tabular-nums" }}>{inq ? `${money(inq.monto)} · día ${inq.diaPago}` : "—"}</span>
-                    </div>
-                  </Card>
-                </button>
-              );
-            })}
-          </div>
+          data.depositos.length === 0 ? (
+            <Empty icon={Building2} title="Crea tu primer depósito" sub="Regístralo solo con un nombre. Luego lo asignas a un departamento con Ingreso." />
+          ) : (
+            <div className="grid md:grid-cols-2 gap-3">
+              {data.depositos.map((dep) => {
+                const a = asignacionActual(dep.id);
+                const deptName = a ? (data.departamentos.find((x) => x.id === a.departamentoId)?.nombre || "") : "";
+                const inqName = a ? (inquilinoActual(a.departamentoId)?.nombre || "—") : "";
+                const cur = a ? data.cobros.find((c) => c.tipo === "deposito" && c.asignacionId === a.id && c.periodo === currentPeriodo()) : null;
+                const est = cur ? cobroEstado(cur) : "pendiente";
+                return (
+                  <button key={dep.id} onClick={() => setModal({ type: "depositoDetail", id: dep.id })} className="text-left">
+                    <Card className="p-4 h-full">
+                      <div className="flex items-start justify-between mb-2">
+                        <div><div className="font-bold text-lg">{dep.nombre}</div><div className="text-sm" style={{ color: C.sub }}>{a ? `${inqName} · ${deptName}` : "Libre"}</div></div>
+                        {a ? estadoPill(est) : <Pill color={C.sub} bg={C.soft}>Libre</Pill>}
+                      </div>
+                      <div className="flex justify-between text-sm pt-2 border-t" style={{ borderColor: C.line }}>
+                        <span style={{ color: C.sub }}>{a ? "Depósito" : "Sin asignar"}</span>
+                        <span className="font-semibold" style={{ fontVariantNumeric: "tabular-nums" }}>{a ? `${money(a.monto)} · día ${a.diaPago}` : "—"}</span>
+                      </div>
+                    </Card>
+                  </button>
+                );
+              })}
+            </div>
+          )
         )}
       </>
     );
@@ -614,7 +707,17 @@ export default function App() {
   function Ingresos() {
     const lista = useMemo(() => {
       const r = [];
-      data.cobros.forEach((c) => { const dep = data.departamentos.find((d) => d.id === c.departamentoId); c.pagos.forEach((pg) => r.push({ tipo: "alquiler", fecha: pg.fecha, monto: pg.monto, t1: `${dep?.nombre || "Depto"} · ${c.inquilinoNombre}`, t2: `Alquiler ${periodoLabel(c.periodo)}`, key: pg.id, cobroId: c.id, pagoId: pg.id })); });
+      data.cobros.forEach((c) => {
+        const dep = data.departamentos.find((d) => d.id === c.departamentoId);
+        const esDep = c.tipo === "deposito";
+        const depo = esDep ? data.depositos.find((x) => x.id === c.depositoId) : null;
+        c.pagos.forEach((pg) => r.push({
+          tipo: "alquiler", fecha: pg.fecha, monto: pg.monto,
+          t1: esDep ? `${depo?.nombre || "Depósito"} · ${c.inquilinoNombre}` : `${dep?.nombre || "Depto"} · ${c.inquilinoNombre}`,
+          t2: `${esDep ? "Depósito" : "Alquiler"} ${periodoLabel(c.periodo)}`,
+          key: pg.id, cobroId: c.id, pagoId: pg.id
+        }));
+      });
       data.otrosIngresos.forEach((o) => r.push({ tipo: "otro", fecha: o.fecha, monto: o.monto, t1: o.concepto, t2: data.catIngreso.find((x) => x.id === o.categoriaId)?.nombre || "Otro", key: o.id, otroId: o.id }));
       return r.sort((a, b) => a.fecha < b.fecha ? 1 : -1);
     }, [data]);
@@ -691,6 +794,118 @@ export default function App() {
     );
   }
 
+  function DepositoForm({ dep }) {
+    const [nombre, setNombre] = useState(dep ? dep.nombre : "");
+    const ok = nombre.trim();
+    return (
+      <Modal title={dep ? "Editar depósito" : "Nuevo depósito"} onClose={() => setModal(null)}
+        footer={<><GhostBtn onClick={() => setModal(null)}>Cancelar</GhostBtn><PrimaryBtn disabled={!ok} onClick={() => {
+          if (dep && !confirm("¿Seguro que deseas guardar estos cambios?")) return;
+          saveDeposito({ id: dep ? dep.id : uid(), nombre: nombre.trim() }); setModal(dep ? { type: "depositoDetail", id: dep.id } : null);
+        }}>Guardar</PrimaryBtn></>}>
+        <Field label="Nombre del depósito"><input style={inputStyle} autoFocus value={nombre} placeholder="Ej. Deposito 1" onChange={(e) => setNombre(e.target.value)} /></Field>
+        <div className="text-xs mb-3" style={{ color: C.sub }}>Luego lo asignas a un departamento con el botón Ingreso.</div>
+        {dep && <button onClick={() => { if (confirm("¿Eliminar este depósito, su asignación y sus cobros?")) { delDeposito(dep.id); setModal(null); } }} className="text-sm font-semibold flex items-center gap-1.5" style={{ color: C.red }}><Trash2 size={15} /> Eliminar depósito</button>}
+      </Modal>
+    );
+  }
+
+  function DepositoDetail({ id }) {
+    const dep = data.depositos.find((x) => x.id === id);
+    if (!dep) { setModal(null); return null; }
+    const a = asignacionActual(id);
+    const deptName = a ? (data.departamentos.find((x) => x.id === a.departamentoId)?.nombre || "") : "";
+    const inqName = a ? (inquilinoActual(a.departamentoId)?.nombre || "—") : "";
+    const cobros = a ? data.cobros.filter((c) => c.tipo === "deposito" && c.asignacionId === a.id).sort((x, y) => x.periodo < y.periodo ? 1 : -1) : [];
+    const footer = a
+      ? <><GhostBtn onClick={() => setModal({ type: "editAsignacion", asigId: a.id, depositoId: id })}>Editar</GhostBtn>
+          <button onClick={() => setModal({ type: "retiroDeposito", asigId: a.id, depositoId: id })} className="rounded-xl py-2.5 px-4 font-semibold text-sm" style={{ color: C.expense, background: C.expenseSoft }}>Retiro</button>
+          <PrimaryBtn onClick={() => { const c = generarCobroDeposito(id, currentPeriodo()); setModal({ type: "pagoForm", cobroId: c }); }}>Pagó</PrimaryBtn></>
+      : <><GhostBtn onClick={() => setModal({ type: "depositoForm", dep })}>Editar</GhostBtn><PrimaryBtn onClick={() => setModal({ type: "asignarDeposito", depositoId: id })}>Ingreso</PrimaryBtn></>;
+    return (
+      <Modal title={dep.nombre} onClose={() => setModal(null)} footer={footer}>
+        <div className="flex items-center justify-between mb-1">
+          <span className="font-semibold">{a ? `${inqName} · ${deptName}` : "Libre"}</span>
+          {a ? <Pill color={C.income} bg={C.incomeSoft}>Ocupado</Pill> : <Pill color={C.sub} bg={C.soft}>Libre</Pill>}
+        </div>
+        {a ? (
+          <>
+            <div className="text-sm mb-3" style={{ color: C.sub }}>{money(a.monto)} mensual · vence el día {a.diaPago}{a.fechaInicio ? ` · desde ${fmtDate(a.fechaInicio)}` : ""}</div>
+            <div className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: C.sub }}>Historial de cobros</div>
+            {cobros.length === 0 && <div className="text-sm" style={{ color: C.sub }}>Aún no hay cobros generados.</div>}
+            {cobros.map((c) => <CobroRow key={c.id} c={c} onPay={() => setModal({ type: "pagoForm", cobroId: c.id })} />)}
+          </>
+        ) : (
+          <div className="text-sm py-2" style={{ color: C.sub }}>Este depósito está libre. Usa <b>Ingreso</b> para asignarlo a un departamento.</div>
+        )}
+      </Modal>
+    );
+  }
+
+  function AsignarDepositoForm({ depositoId }) {
+    const dep = data.depositos.find((x) => x.id === depositoId);
+    const [departamentoId, setDep] = useState(ocupados[0]?.id || "");
+    const [monto, setMonto] = useState("");
+    const [diaPago, setDiaPago] = useState(5);
+    const [fechaInicio, setFechaInicio] = useState(todayStr());
+    const inqName = inquilinoActual(departamentoId)?.nombre || "";
+    const ok = departamentoId && Number(monto) > 0;
+    return (
+      <Modal title="Asignar depósito" onClose={() => setModal(null)}
+        footer={<><GhostBtn onClick={() => setModal(null)}>Cancelar</GhostBtn><PrimaryBtn disabled={!ok} onClick={() => { asignarDeposito(depositoId, { departamentoId, monto, diaPago, fechaInicio }); setModal({ type: "depositoDetail", id: depositoId }); }}>Guardar</PrimaryBtn></>}>
+        <div className="text-sm mb-3" style={{ color: C.sub }}>{dep?.nombre}</div>
+        {ocupados.length === 0 ? (
+          <div className="text-sm" style={{ color: C.sub }}>No hay departamentos ocupados. Primero registra un inquilino en un departamento.</div>
+        ) : (
+          <>
+            <Field label="Departamento (inquilino actual)">
+              <select style={inputStyle} value={departamentoId} onChange={(e) => setDep(e.target.value)}>
+                {ocupados.map((d) => <option key={d.id} value={d.id}>{d.nombre} · {inquilinoActual(d.id)?.nombre}</option>)}
+              </select>
+            </Field>
+            <div className="text-xs mb-3" style={{ color: C.sub }}>El depósito quedará a nombre de: <b>{inqName || "—"}</b></div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Monto de pago (S/)"><input style={inputStyle} type="number" inputMode="decimal" value={monto} placeholder="0.00" onChange={(e) => setMonto(e.target.value)} /></Field>
+              <Field label="Día de pago"><select style={inputStyle} value={diaPago} onChange={(e) => setDiaPago(Number(e.target.value))}>{Array.from({ length: 31 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{pad(n)}</option>)}</select></Field>
+            </div>
+            <Field label="Fecha de inicio de uso"><input style={inputStyle} type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} /></Field>
+          </>
+        )}
+      </Modal>
+    );
+  }
+
+  function EditAsignacionForm({ asigId, depositoId }) {
+    const a = data.asignaciones.find((x) => x.id === asigId);
+    const [monto, setMonto] = useState(a ? String(a.monto) : "");
+    const [diaPago, setDiaPago] = useState(a?.diaPago || 5);
+    const [fechaInicio, setFechaInicio] = useState(a?.fechaInicio || "");
+    const ok = Number(monto) > 0;
+    return (
+      <Modal title="Editar depósito" onClose={() => setModal(null)}
+        footer={<><GhostBtn onClick={() => setModal(null)}>Cancelar</GhostBtn><PrimaryBtn disabled={!ok} onClick={() => { if (!confirm("¿Seguro que deseas guardar estos cambios?")) return; editarAsignacion(asigId, { monto, diaPago, fechaInicio }); setModal({ type: "depositoDetail", id: depositoId }); }}>Guardar</PrimaryBtn></>}>
+        <div className="text-xs mb-3" style={{ color: C.sub }}>Para cambiar de departamento, primero registra el retiro del depósito.</div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Monto de pago (S/)"><input style={inputStyle} type="number" inputMode="decimal" value={monto} onChange={(e) => setMonto(e.target.value)} /></Field>
+          <Field label="Día de pago"><select style={inputStyle} value={diaPago} onChange={(e) => setDiaPago(Number(e.target.value))}>{Array.from({ length: 31 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{pad(n)}</option>)}</select></Field>
+        </div>
+        <Field label="Fecha de inicio de uso"><input style={inputStyle} type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} /></Field>
+      </Modal>
+    );
+  }
+
+  function RetiroDepositoForm({ asigId, depositoId }) {
+    const [fecha, setFecha] = useState(todayStr());
+    return (
+      <Modal title="Retiro de depósito" onClose={() => setModal(null)}
+        footer={<><GhostBtn onClick={() => setModal(null)}>Cancelar</GhostBtn>
+          <button onClick={() => { if (!confirm("¿Seguro que deseas registrar el retiro del depósito?")) return; retirarAsignacion(asigId, fecha); setModal({ type: "depositoDetail", id: depositoId }); }} className="flex-1 rounded-xl py-2.5 font-semibold text-white text-sm" style={{ background: C.expense }}>Confirmar retiro</button></>}>
+        <Field label="Fecha de salida"><input style={inputStyle} type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></Field>
+        <div className="text-xs" style={{ color: C.sub }}>Sus cobros y pagos se conservan. El depósito quedará libre para una nueva asignación.</div>
+      </Modal>
+    );
+  }
+
   function renderModal() {
     if (modal.type === "deptoForm") return <DeptoForm dept={modal.dept} />;
     if (modal.type === "deptoDetail") return <DeptoDetail id={modal.id} />;
@@ -702,6 +917,11 @@ export default function App() {
     if (modal.type === "pagoForm") return <PagoForm cobroId={modal.cobroId} />;
     if (modal.type === "historial") return <HistorialInquilinos />;
     if (modal.type === "inquilinoHist") return <InquilinoHistorial inqId={modal.inqId} back={modal.back} />;
+    if (modal.type === "depositoForm") return <DepositoForm dep={modal.dep} />;
+    if (modal.type === "depositoDetail") return <DepositoDetail id={modal.id} />;
+    if (modal.type === "asignarDeposito") return <AsignarDepositoForm depositoId={modal.depositoId} />;
+    if (modal.type === "editAsignacion") return <EditAsignacionForm asigId={modal.asigId} depositoId={modal.depositoId} />;
+    if (modal.type === "retiroDeposito") return <RetiroDepositoForm asigId={modal.asigId} depositoId={modal.depositoId} />;
     return null;
   }
 
