@@ -17,7 +17,7 @@ const C = {
   red: "#c0392b",
 };
 const FONT = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
-const APP_VERSION = "v9";
+const APP_VERSION = "v10";
 
 /* ------------------------------- utilities -------------------------------- */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -34,7 +34,13 @@ const money = (n) => "S/ " + (Number(n) || 0).toLocaleString("es-PE", { minimumF
 
 const sumPagos = (c) => c.pagos.reduce((s, p) => s + Number(p.monto), 0);
 const cobroSaldo = (c) => c.monto - sumPagos(c);
-const cobroEstado = (c) => { const p = sumPagos(c); if (p <= 0.001) return "pendiente"; if (p >= c.monto - 0.001) return "pagado"; return "parcial"; };
+const cobroEstado = (c) => {
+  const p = sumPagos(c);
+  if (p >= c.monto - 0.001) return "pagado";
+  if (p > 0.001) return "parcial";
+  if (c.vencimiento && daysBetween(c.vencimiento, todayStr()) > 0) return "pendiente"; // ya pasó la fecha
+  return "porCobrar"; // aún no vence
+};
 const cobroFechaCompleto = (c) => cobroEstado(c) === "pagado" ? c.pagos.map((p) => p.fecha).sort().slice(-1)[0] : null;
 const cobroAtraso = (c) => { const f = cobroFechaCompleto(c); return f == null ? null : daysBetween(c.vencimiento, f); };
 
@@ -101,6 +107,7 @@ function Pill({ children, color, bg }) {
 function estadoPill(estado) {
   if (estado === "pagado") return <Pill color={C.income} bg={C.incomeSoft}>Pagado</Pill>;
   if (estado === "parcial") return <Pill color={C.amber} bg={C.amberSoft}>Parcial</Pill>;
+  if (estado === "porCobrar") return <Pill color={C.sub} bg={C.soft}>Por cobrar</Pill>;
   return <Pill color={C.expense} bg={C.expenseSoft}>Pendiente</Pill>;
 }
 function Field({ label, children }) {
