@@ -17,7 +17,7 @@ const C = {
   red: "#c0392b",
 };
 const FONT = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
-const APP_VERSION = "v10";
+const APP_VERSION = "v11";
 
 /* ------------------------------- utilities -------------------------------- */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -43,6 +43,12 @@ const cobroEstado = (c) => {
 };
 const cobroFechaCompleto = (c) => cobroEstado(c) === "pagado" ? c.pagos.map((p) => p.fecha).sort().slice(-1)[0] : null;
 const cobroAtraso = (c) => { const f = cobroFechaCompleto(c); return f == null ? null : daysBetween(c.vencimiento, f); };
+// Estado simple para la tarjeta: Pendiente solo si una fecha ya vencida sigue sin pagarse; si no, Pagado.
+const unidadEstado = (cobros) => {
+  const hoy = todayStr();
+  const vencidoSinPagar = cobros.some((c) => daysBetween(c.vencimiento, hoy) > 0 && sumPagos(c) < c.monto - 0.001);
+  return vencidoSinPagar ? "pendiente" : "pagado";
+};
 
 const startOfWeek = () => { const d = new Date(); const day = (d.getDay() + 6) % 7; d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - day); return d; };
 const inPeriod = (fechaStr, mode) => {
@@ -659,8 +665,7 @@ export default function App() {
             <div className="grid md:grid-cols-2 gap-3">
               {data.departamentos.map((d) => {
                 const inq = inquilinoActual(d.id);
-                const cur = data.cobros.find((c) => c.tipo !== "deposito" && c.departamentoId === d.id && c.periodo === currentPeriodo());
-                const est = cur ? cobroEstado(cur) : "pendiente";
+                const est = inq ? unidadEstado(data.cobros.filter((c) => c.tipo !== "deposito" && c.inquilinoId === inq.id)) : "pendiente";
                 return (
                   <button key={d.id} onClick={() => setModal({ type: "deptoDetail", id: d.id })} className="text-left">
                     <Card className="p-4 h-full">
@@ -687,8 +692,8 @@ export default function App() {
                 const a = asignacionActual(dep.id);
                 const deptName = a ? (data.departamentos.find((x) => x.id === a.departamentoId)?.nombre || "") : "";
                 const inqName = a ? (inquilinoActual(a.departamentoId)?.nombre || "—") : "";
-                const cur = a ? data.cobros.find((c) => c.tipo === "deposito" && c.asignacionId === a.id && c.periodo === currentPeriodo()) : null;
-                const est = cur ? cobroEstado(cur) : "pendiente";
+                const cur = a ? data.cobros.filter((c) => c.tipo === "deposito" && c.asignacionId === a.id) : [];
+                const est = a ? unidadEstado(cur) : "pendiente";
                 return (
                   <button key={dep.id} onClick={() => setModal({ type: "depositoDetail", id: dep.id })} className="text-left">
                     <Card className="p-4 h-full">
