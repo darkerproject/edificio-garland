@@ -17,7 +17,7 @@ const C = {
   red: "#c0392b",
 };
 const FONT = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
-const APP_VERSION = "v11";
+const APP_VERSION = "v12";
 
 /* ------------------------------- utilities -------------------------------- */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -29,6 +29,9 @@ const daysBetween = (a, b) => Math.round((parse(b) - parse(a)) / 86400000); // b
 const lastDay = (y, m) => new Date(y, m, 0).getDate();
 const currentPeriodo = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; };
 const periodoLabel = (p) => { const [y, m] = p.split("-").map(Number); const s = new Date(y, m - 1, 1).toLocaleDateString("es-PE", { month: "long", year: "numeric" }); return s.charAt(0).toUpperCase() + s.slice(1); };
+// El pago que vence a fin de un mes cubre el mes SIGUIENTE.
+const shiftPeriodo = (p, delta) => { const [y, m] = p.split("-").map(Number); const d = new Date(y, m - 1 + delta, 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; };
+const mesCubierto = (c) => shiftPeriodo(c.periodo, 1);
 const vencimientoFor = (periodo, dia) => { const [y, m] = periodo.split("-").map(Number); const d = Math.min(dia, lastDay(y, m)); return `${y}-${pad(m)}-${pad(d)}`; };
 const money = (n) => "S/ " + (Number(n) || 0).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -726,7 +729,7 @@ export default function App() {
         c.pagos.forEach((pg) => r.push({
           tipo: "alquiler", fecha: pg.fecha, monto: pg.monto,
           t1: esDep ? `${depo?.nombre || "Depósito"} · ${c.inquilinoNombre}` : `${dep?.nombre || "Depto"} · ${c.inquilinoNombre}`,
-          t2: `${esDep ? "Depósito" : "Alquiler"} ${periodoLabel(c.periodo)}`,
+          t2: `${esDep ? "Depósito" : "Alquiler"} ${periodoLabel(mesCubierto(c))}`,
           key: pg.id, cobroId: c.id, pagoId: pg.id
         }));
       });
@@ -988,7 +991,7 @@ export default function App() {
     const est = cobroEstado(c), saldo = cobroSaldo(c), atr = cobroAtraso(c);
     return (
       <div className="rounded-xl p-3 mb-2" style={{ background: C.soft }}>
-        <div className="flex items-center justify-between"><span className="font-semibold">{periodoLabel(c.periodo)}</span>{estadoPill(est)}</div>
+        <div className="flex items-center justify-between"><span className="font-semibold">{periodoLabel(mesCubierto(c))}</span>{estadoPill(est)}</div>
         <div className="text-xs mt-0.5" style={{ color: C.sub }}>
           Vence {fmtDate(c.vencimiento)} · {money(sumPagos(c))} de {money(c.monto)}
           {est === "pagado" && atr != null && (atr <= 0 ? " · pagó puntual" : ` · pagó ${atr} d tarde`)}
@@ -1114,7 +1117,7 @@ export default function App() {
     return (
       <Modal title="Registrar pago" onClose={() => setModal(null)}
         footer={<><GhostBtn onClick={() => setModal(null)}>Cancelar</GhostBtn><PrimaryBtn disabled={!(Number(monto) > 0)} onClick={() => { registrarPago(cobroId, fecha, monto); setModal(c?.departamentoId ? { type: "deptoDetail", id: c.departamentoId } : null); }}>Guardar pago</PrimaryBtn></>}>
-        <div className="text-sm mb-3" style={{ color: C.sub }}>{dep?.nombre} · {c && periodoLabel(c.periodo)} · saldo {money(saldo)}</div>
+        <div className="text-sm mb-3" style={{ color: C.sub }}>{dep?.nombre} · {c && periodoLabel(mesCubierto(c))} · saldo {money(saldo)}</div>
         <Field label="Monto pagado (S/)"><input style={inputStyle} type="number" inputMode="decimal" value={monto} onChange={(e) => setMonto(e.target.value)} /></Field>
         <Field label="Fecha del pago"><input style={inputStyle} type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></Field>
         <div className="text-xs" style={{ color: C.sub }}>Si pagas menos que el saldo, quedará como pago parcial.</div>
@@ -1165,7 +1168,7 @@ export default function App() {
     const [nuevaCat, setNuevaCat] = useState("");
     // alquiler fields
     const [deptId, setDeptId] = useState(ocupados[0]?.id || "");
-    const [mes, setMes] = useState(currentPeriodo());
+    const [mes, setMes] = useState(shiftPeriodo(currentPeriodo(), 1)); // mes que se cubre
     const [monto, setMonto] = useState("");
     const [fecha, setFecha] = useState(todayStr());
     // otro fields
@@ -1174,14 +1177,14 @@ export default function App() {
     const esAlquiler = categoriaId === "alquiler" && !creando;
     const dep = data.departamentos.find((x) => x.id === deptId);
     const inqDep = dep ? inquilinoActual(dep.id) : null;
-    const cobroExist = data.cobros.find((c) => c.departamentoId === deptId && c.periodo === mes);
+    const cobroExist = data.cobros.find((c) => c.tipo !== "deposito" && c.departamentoId === deptId && c.periodo === shiftPeriodo(mes, -1));
     const saldoSugerido = cobroExist ? cobroSaldo(cobroExist) : (inqDep ? inqDep.monto : 0);
 
     const ok = esAlquiler ? (deptId && mes && Number(monto || saldoSugerido) > 0) : (concepto.trim() && Number(monto) > 0 && (creando ? nuevaCat.trim() : categoriaId));
 
     const guardar = () => {
       if (esAlquiler) {
-        const cid = generarCobro(deptId, mes);
+        const cid = generarCobro(deptId, shiftPeriodo(mes, -1));
         registrarPago(cid, fecha, Number(monto || saldoSugerido));
       } else {
         let cid = categoriaId; if (creando) cid = addCatIngreso(nuevaCat.trim());
